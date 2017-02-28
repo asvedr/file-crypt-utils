@@ -40,9 +40,13 @@ class AESCipher(object):
     def _unpad(s):
         return s[:-ord(s[len(s)-1:])]
 
+def to8(s):
+    for _ in range(0, 8 - len(s)):
+        s = '0' + s
+    return s
 def send(conn, mess):
 	raw = mess.encode('utf8')
-	l = hex(len(raw))[2:].encode('utf8')
+	l = to8(hex(len(raw))[2:]).encode('utf8')
 	conn.send(l)
 	conn.send(raw)
 
@@ -86,7 +90,8 @@ def main(args,passwd):
 				else:
 					send(conn, json.dumps({'mess': 'file not exist'}))
 			elif req['act'] == 'del':
-				pass
+				os.path.remove(os.path.join(args.dir, req['file']))
+                                send(conn, json.dumps({'mess', 'ok'}))
 			else:
 				raise Exception('key error', req['act'])
 		except Exception as e:
