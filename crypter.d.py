@@ -18,11 +18,16 @@ import stat
 import time
 import socket
 import json
+import argparse
+import getpass
 
+logfile = None
 def log(text):
+    if logfile is None:
+        return
     t = time.localtime()
     t = '%s.%s.%s %s:%s:%s' % (t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec)
-    with open('log', 'a') as h:
+    with open(logfile, 'a') as h:
         h.write('%s: %s\n' % (t, text))
 
 def to8(s):
@@ -82,26 +87,19 @@ def decrypt(inp, out, pas):
 def encrypt(inp, out, pas):
     return sp.call(['openssl', 'aes-256-cbc', '-a', '-salt', '-in', inp, '-out', out, '-pass', 'pass:' + pas]) == 0
 
-# args:
-#   1 - src dir
-#   2 - dest dir
-#   3 - pass
 class Crypter:
-    def __init__(self,argv):
-        self._srcd = argv[0]
-        self._dstd = argv[1]
-        self._pass = argv[2]
-        if len(argv) > 3:
-            if argv[3] == 'DEL':
-                self._port = 'DEL'
-            else:
-                self._port = int(argv[3])
+    def __init__(self,src,dst,fdel,passwd):
+        self._srcd = src
+        self._ddst = dst
+        self._pass = passwd
+        if fdel:
+            self._port = 'DEL'
         else:
             self._port = 28960
         self.remover = Remover(self._port)
     def run(self):
         while True:
-            self.trydir(self._srcd, self._dstd)
+            self.trydir(self._srcd, self._ddst)
             self.remover.flush()
             time.sleep(5)
     def trydir(self, src, dst):
@@ -122,30 +120,42 @@ class Crypter:
         else:
             os.mkdir(dst)
             self.withdir(src, dst)
-    def withdir(self, srcd, dstd):
+    def withdir(self, srcd, ddst):
         print(srcd)
         for root,dirs,files in os.walk(srcd):
             for obj in files:
                 finp = os.path.join(root, obj)
-                fout = os.path.join(dstd, obj)
+                fout = os.path.join(ddst, obj)
                 encrypt(finp, fout, self._pass)
                 os.chmod(fout, 0o600)
                 self.remover.dfile(finp)
             for obj in dirs:
                 finp = os.path.join(root, obj)
-                fout = os.path.join(dstd, obj)
+                fout = os.path.join(ddst, obj)
                 self.trydir(finp, fout)
                 self.remover.ddir(finp)
 
+parser = argparse.ArgumentParser('crypt all files from dir and remove source')
+parser.add_argument('--daemon', default=False, action='store_true', help='run process as daemon')
+parser.add_argument('--src', help='source dir')
+parser.add_argument('--dst', help='destination dir')
+parser.add_argument('--fdel', default=False, action='store_true', help="directly delete src, don't use daemon")
+parser.add_argument('--log', help='log file', default=None)
+args = parser.parse_args()
+if not (args.log is None):
+    logfile = args.log
+
 user = sp.check_output(['whoami']).decode('utf8').strip()
-if user != 'root':
-    print('run script from root please (%s)' % user)
+#if user != 'root':
+#    print('please run from root')
+#    sys.exit(1)
+if args.src is None or args.dst is None:
+    print('src or dst not setted')
     sys.exit(1)
-args = sys.argv[1:]
-if args[0] == 'daemon':
-    args = args[1:]
+passwd = getpass.getpass()
+if args.daemon:
     if os.fork() == 0:
-        setsid()
-        Crypter(args).run()
+        os.setsid()
+        Crypter(args.src, args.dst, args.fdel, passwd).run()
 else:
-    Crypter(args).run()
+    Crypter(args.src, args.dst, args.fdel, passwd).run()

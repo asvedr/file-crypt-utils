@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import socket
 import json
 import os
@@ -36,7 +37,7 @@ def main(forceroot, tdir):
 			print(e)
 			conn.send(b'n')
 
-parser = argparse.ArgumentParser('remove files request')
+parser = argparse.ArgumentParser('remove files by request')
 parser.add_argument('--daemon', default=False, action='store_true', help='run process as daemon')
 parser.add_argument('--root', default=False, action='store_true', help='allow run from root')
 parser.add_argument('--dir', help='target dir')
