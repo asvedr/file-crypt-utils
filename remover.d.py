@@ -20,7 +20,7 @@ def main(forceroot, tdir):
 	sock.bind( ('127.0.0.1', 28960) )
 	sock.listen(1)
 	while True:
-		conn, addr = sock.accept()
+		conn, _ = sock.accept()
 		count = int(conn.recv(8).decode('utf8'), 16)
 		data = conn.recv(count)
 		try:

@@ -123,6 +123,8 @@ class Crypter:
         self._srcd = src
         self._ddst = dst
         self._pass = passwd
+        if os.osdir(dst):
+            os.chmod(dst, 0o600)
         if fdel:
             self._port = 'DEL'
         else:
@@ -150,6 +152,7 @@ class Crypter:
             self.withdir(src, dst)
         else:
             os.mkdir(dst)
+            os.chmod(dst, 0o600)
             self.withdir(src, dst)
     def withdir(self, srcd, ddst):
         print(srcd)
