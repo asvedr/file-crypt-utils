@@ -13,13 +13,14 @@ import hashlib
 import base64
 import traceback
 from functools import reduce
+import shutil
 
 PORT = 28961
 
 # actions:
 #    {'act': 'save', 'file': <file-to-save>, 'text': <text-to-enc>, 'pass': <password>}
 #    {'act': 'load', 'file': <file-to-load>, 'pass': <password>}
-#   {'act': 'del',  'file': <file-to-del>, 'pass': <password>}
+#    {'act': 'del',  'file': <file-to-del>, 'pass': <password>}
 
 class AESCipher(object):
     def __init__(self, key): 
@@ -51,6 +52,15 @@ def send(conn, mess):
     conn.send(l)
     conn.send(raw)
 
+def trymakedirs(srcDir, path):
+    dirs = path.split('/')[:-1]
+    path = srcDir
+    for dir in dirs:
+        path = os.path.join(path, dir)
+        if not os.path.isdir(path):
+            os.mkdir(path)
+        os.chmod(path, 0o700)
+
 def main(args,passwd):
     server = socket.socket()
     server.bind( ('127.0.0.1', PORT) )
@@ -64,10 +74,14 @@ def main(args,passwd):
             if req['pass'] != passwd:
                 send(conn, json.dumps({'mess': 'password error'}))
                 continue
+            if any([(d == '.' or d == '..') for d in req['file'].split('/')]):
+                send(conn, json.dumps({'mess': 'bad path'}))
+                continue
             if req['act'] == 'save':
                 passwd = req['pass']
                 name = req['file']
                 path = os.path.join(args.dir, name)
+                trymakedirs(args.dir, name)
                 with open(path, 'wt') as h:
                     cipher = AESCipher(req['pass'])
                     mess = cipher.encrypt(req['text']).decode('utf8')
@@ -94,7 +108,8 @@ def main(args,passwd):
                 else:
                     send(conn, json.dumps({'mess': 'file not exist'}))
             elif req['act'] == 'del':
-                os.remove(os.path.join(args.dir, req['file']))
+                #os.remove(os.path.join(args.dir, req['file']))
+                shutil.rmtree(os.path.join(args.dir, req['file']))
                 send(conn, json.dumps({'mess': 'ok'}))
             else:
                 raise Exception('key error', req['act'])
@@ -108,6 +123,11 @@ parser.add_argument('--daemon', default=False, action='store_true', help='run pr
 parser.add_argument('--dir', help='root directory for cipher store')
 args = parser.parse_args()
 
+uname = sp.check_output('whoami').decode('utf8').strip()
+if uname != 'root':
+    print('run from root please')
+    sys.exit(1)
+
 passwd = getpass.getpass()
 
 if args.dir is None:
@@ -120,18 +140,3 @@ if args.daemon:
 else:
     main(args,passwd)
 
-'''
-parser.add_argument('--src')
-parser.add_argument('--dst')
-
-ans = parser.parse_args()
-passwd = getpass.getpass()
-with open(ans.src, 'rt') as h:
-    acc = ''
-    for line in h.read().split('\n'):
-        if len(line) > 0:
-            acc = acc + line
-    mess = AESCipher(passwd).decrypt(acc)
-    with open(ans.dst, 'wt') as h:
-        h.write(mess)
-'''
