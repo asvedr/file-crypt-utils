@@ -6,6 +6,8 @@ import subprocess as sp
 import sys
 import argparse
 
+PORT = 28960
+
 def main(forceroot, tdir):
     if tdir is None:
         print('DIR NOT SET')
@@ -17,7 +19,7 @@ def main(forceroot, tdir):
         print('if you REALY want to run it from root use flag --root')
         return
     sock = socket.socket()
-    sock.bind( ('127.0.0.1', 28960) )
+    sock.bind( ('127.0.0.1', PORT) )
     sock.listen(1)
     while True:
         conn, _ = sock.accept()

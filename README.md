@@ -1,7 +1,13 @@
 # file-crypt-utils
 
+## require
+pycrypto
+
+## synopsys
 Scripts for automatic crypt files
 you make *src* and *dst* dirs
+
+system tested on linux and osx by python3
 
 ## crypter.d.py
 ### root
@@ -26,6 +32,9 @@ asker.py is script for connecting to keeper.d.py. Use it for add new files or
 read files from store and print it on stdout or delete files in store.
 All operations requires passoword.
 **It isn't daemon.**
+## runner.py
+### root
+runner.py is one script for sync running crypter.d and keeper.d daemons
 
 you should run crypter.d and keeper.d manual AND type password after run
 so encrypt-password exist only in RAM

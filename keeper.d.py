@@ -121,14 +121,19 @@ def main(args,passwd):
 parser = argparse.ArgumentParser('remove files by request')
 parser.add_argument('--daemon', default=False, action='store_true', help='run process as daemon')
 parser.add_argument('--dir', help='root directory for cipher store')
+parser.add_argument('--softpass', default=False, action='store_true', help='request password without getpass.getpass')
+parser.add_argument('--noroot', default=False, action='store_true', help='request password without getpass.getpass')
 args = parser.parse_args()
 
 uname = sp.check_output('whoami').decode('utf8').strip()
-if uname != 'root':
+if uname != 'root' and not args.noroot:
     print('run from root please')
     sys.exit(1)
 
-passwd = getpass.getpass()
+if args.softpass:
+    passwd = sys.stdin.readline()[:-1]
+else:
+    passwd = getpass.getpass()
 
 if args.dir is None:
     print('no root dir')

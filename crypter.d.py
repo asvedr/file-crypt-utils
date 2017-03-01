@@ -25,6 +25,8 @@ from Crypto.Cipher import AES
 import hashlib
 import base64
 
+PORT = 28960
+
 class AESCipher(object):
     def __init__(self, key): 
         self.bs = 32
@@ -128,7 +130,7 @@ class Crypter:
         if fdel:
             self._port = 'DEL'
         else:
-            self._port = 28960
+            self._port = PORT
         self.remover = Remover(self._port)
     def run(self):
         while True:
@@ -175,18 +177,23 @@ parser.add_argument('--src', help='source dir')
 parser.add_argument('--dst', help='destination dir')
 parser.add_argument('--fdel', default=False, action='store_true', help="directly delete src, don't use daemon")
 parser.add_argument('--log', help='log file', default=None)
+parser.add_argument('--softpass', default=False, action='store_true', help='request password without getpass.getpass')
+parser.add_argument('--noroot', default=False, action='store_true', help='allow run with no root')
 args = parser.parse_args()
 if not (args.log is None):
     logfile = args.log
 
 user = sp.check_output(['whoami']).decode('utf8').strip()
-#if user != 'root':
-#    print('please run from root')
-#    sys.exit(1)
+if user != 'root' and not args.noroot:
+    print('please run from root')
+    sys.exit(1)
 if args.src is None or args.dst is None:
     print('src or dst not setted')
     sys.exit(1)
-passwd = getpass.getpass()
+if args.softpass:
+    passwd = sys.stdin.readline()[:-1]
+else:
+    passwd = getpass.getpass()
 if args.daemon:
     if os.fork() == 0:
         os.setsid()
