@@ -123,7 +123,7 @@ class Crypter:
         self._srcd = src
         self._ddst = dst
         self._pass = passwd
-        if os.osdir(dst):
+        if os.path.isdir(dst):
             os.chmod(dst, 0o700)
         if fdel:
             self._port = 'DEL'
@@ -155,7 +155,7 @@ class Crypter:
             os.chmod(dst, 0o700)
             self.withdir(src, dst)
     def withdir(self, srcd, ddst):
-        print(srcd)
+        #print(srcd)
         for root,dirs,files in os.walk(srcd):
             for obj in files:
                 finp = os.path.join(root, obj)
