@@ -4,8 +4,9 @@
 pycrypto
 
 ## synopsys
-Scripts for automatic crypt files
-you make *src* and *dst* dirs
+Scripts for automatic crypt files.
+You make *src* and *dst* dirs. Daemons grab files from
+*src*, encrypt and put in *dst*. And change owner to root.
 
 system tested on linux and osx by python3
 
