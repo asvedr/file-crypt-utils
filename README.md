@@ -35,6 +35,10 @@ All operations requires passoword.
 ## runner.py
 ### root
 runner.py is one script for sync running crypter.d and keeper.d daemons
+## image.py
+### user
+simple script to hide text in any image using text, image, and password.
+Or gen generate random image and hide text there
 
 you should run crypter.d and keeper.d manual AND type password after run
 so encrypt-password exist only in RAM
