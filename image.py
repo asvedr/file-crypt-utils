@@ -1,7 +1,10 @@
+#!/usr/bin/env python3
 import argparse
 from PIL import Image
 from functools import reduce
 import hashlib
+import random
+import time
 
 def _prims(cnt):
     prims = [2]
@@ -16,12 +19,20 @@ def _prims(cnt):
             prims.append(i)
         i += 2
     return tuple(prims)
-prims = _prims(5000)
+prims = _prims(5001)
+
+class RandomLoop(Exception):
+    pass
 
 class Random:
     def __init__(self,n0):#,ia,ib):
         self.n = n0
-        self.M = prims[2050] * prims[3000]
+        self.A = 2050
+        self.B = 4000
+        self.initM()
+        #self.M = prims[5000] * prims[4999]
+    def initM(self):
+        self.M = prims[self.A] * prims[self.B]
     def __iter__(self):
         return self
     def __next__(self):
@@ -31,13 +42,25 @@ class Random:
         return self.n
     def nextid(self, rng, idl):
         ''' return val witch is not in set 'idl' and put it to 'idl' '''
-        for i in self:
-            val = i % rng
-            if not (val in idl):
-                idl.add(val)
-                return val
+        while True:
+            try:
+                cnt = 0
+                for i in self:
+                    val = i % rng
+                    if not (val in idl):
+                        idl.add(val)
+                        return val
+                    cnt += 1
+                    if cnt > 300:
+                        raise RandomLoop()
+            except RandomLoop:
+                print('end for %s' % self.B)
+                self.B -= 1
+                self.n = prims[self.B]
+                self.initM()
 
 alphabet = ['\n','\t'] + [chr(i) for i in range(32, 127)] + [chr(i) for i in range(ord('А'),ord('ё'))]
+alphaind = dict(zip(alphabet, range(len(alphabet))))
 signal = 'ok'
 
 def md5(s):
@@ -68,37 +91,126 @@ def isrgb(pic):
     except:
         return False
 
-def encrypt(key,textfile,picn):
-    pic = Image.open(picn)
-    if not isrgb(pic):
-        pic = pic.convert('RGB')
-    w = pic.size[0]
-    h = pic.size[1]
-    # making ind map
-    #def to(oldmax, newmax):
-    #    return lambda x: int((x / oldmax) * newmax)
-    mkey = md5(key)
-    seqc = shuffle(prims[int(mkey[:3], 16)], len(alphabet))
-    randx = Random(prims[int(mkey[3:6], 16)])
-    randy = Random(prims[int(mkey[6:9], 16)])
-    redind = dict(zip(seqc, range(len(seqc))))
+randclr = lambda: random.randint(0,255)
+def sym_indexer(key):
+    seq = shuffle(int(key, 16), len(alphabet))
+    return dict(zip(seq, range(len(seq))))
+def indexer_sym(key):
+    seq = shuffle(int(key, 16), len(alphabet))
+    return dict(zip(range(len(seq)), seq))
+
+class PixelWalker(object):
+    def __init__(self,key,w,h):
+        self.key = key
+        mkey = md5(key)
+        self.sind   = sym_indexer(mkey[:4])# (
+                #sym_indexer(mkey[:4])#,
+                #sym_indexer(mkey[4:8]),
+                #sym_indexer(mkey[8:12])
+            #)
+        self.inds   = indexer_sym(mkey[:4])# (
+                #indexer_sym(mkey[:4])#,
+                #indexer_sym(mkey[4:8]),
+                #indexer_sym(mkey[8:12])
+            #)
+        self.randx1 = Random(prims[int(mkey[12:15], 16)])
+        self.randx2 = Random(prims[int(mkey[15:18], 16)])
+        self.randy1 = Random(prims[int(mkey[18:21], 16)])
+        self.randy2 = Random(prims[int(mkey[21:24], 16)])
+        self.kind   = 0
+        self.klen   = len(key)
+        self.w      = w
+        self.h      = h
+        self.wh     = w * h
+        self.idx    = set()
+        self.idy    = set()
+    def randx(self):
+        #if alphaind[self.key[self.kind]] % 2 == 0:
+            return self.randx1
+        #else:
+        #    return self.randx2
+    #def randy(self):
+        #if alphaind[self.key[self.klen - self.kind - 1]] % 2 == 0:
+        #    return self.randy1
+        #else:
+        #    return self.randy2
+    def getc(self,pic):
+        passym  = self.key[self.kind] 
+        ind     = alphaind[passym] % 3
+        crd     = self.randx().nextid(self.wh, self.idx)
+        y       = int(crd / self.w)
+        x       = crd % self.w
+        pixel   = pic[x,y]#pic[self.randx().nextid(self.w, self.idx), self.randy().nextid(self.h, self.idy)]
+        return self.inds[pixel[ind] ^ alphaind[passym]]
+    def putc(self,pic,sym):
+        #x = self.randx().nextid(self.w, self.idx)
+        #y = self.randy().nextid(self.h, self.idy)
+        crd = self.randx().nextid(self.wh, self.idx)
+        y   = int(crd / self.w)
+        x   = crd % self.w
+        pixel = pic[x,y]
+        passym = self.key[self.kind]
+        ind    = alphaind[passym] % 3
+        def cval():
+            return self.sind[sym] ^ alphaind[passym]
+        if ind == 0:
+            pic[x,y] = (cval(), pixel[1], pixel[2])
+        elif ind == 1:
+            pic[x,y] = (pixel[0], cval(), pixel[2])
+        else:
+            pic[x,y] = (pixel[0], pixel[1], cval())
+    #@staticmethod
+    def chstate(f):
+        def res(self,*args):
+            f(self,*args)
+            self.kind = (self.kind + 1) % self.klen
+        return res
+    @chstate
+    def getpixel(self,pic):
+        x = self.randx()
+        y = self.randy()
+        clr = pic[x,y]
+        self.randc()
+    @chstate
+    def putpixel(self,pic,sym):
+        indexer = self.randc()
+        pic[self.randx(), self.randy()] = indexer[sym] ^ self.key[self.kind]
+
+def encrypt(key,textfile,picn,rand_pic_size,salt):
+    if rand_pic_size is None:
+        pic = Image.open(picn)
+        if not isrgb(pic):
+            pic = pic.convert('RGB')
+        w = pic.size[0]
+        h = pic.size[1]
+    else:
+        pic = Image.new('RGB', rand_pic_size, 'white')
+        random.seed(time.time())
+        w = pic.size[0]
+        h = pic.size[1]
+        px = pic.load()
+        for x in range(w):
+            for y in range(h):
+                px[x,y] = (randclr(), randclr(), randclr())
+    walker = PixelWalker(key,w,h)
     with open(textfile, 'rt') as hdr:
         txt = hdr.read()
     tlen = to4(hex(len(txt))[2:])
-    #acc = []
-    xl = set()
-    yl = set()
+    #xl = set()
+    #yl = set()
     px = pic.load()
-    for c in (signal + tlen + txt):
-        x = randx.nextid(w, xl)
-        y = randy.nextid(h, yl)
-        #xl.add(x)
-        #yl.add(y)
-        (r,g,b) = px[x,y]
-        px[x,y] = (redind[c], g, b)
-        #acc.append((x,y,redind[c]))
-    pic.save(picn + '.cr.png', 'PNG')
-    print('ok')
+    #i = 0
+    txt = signal + tlen + txt
+    for c in txt:
+        #if i % 20 == 0:
+            #print('%s%%' % (float(i) / len(txt) * 100))
+        walker.putc(px, c)
+        #i += 1
+    if rand_pic_size is None:
+        pic.save(picn + '.cr.png', 'PNG')
+    else:
+        pic.save(picn)
+    print('ok %s' % len(txt))
 
 def decrypt(key,textfile,picn):
     pic = Image.open(picn)
@@ -106,39 +218,28 @@ def decrypt(key,textfile,picn):
         pic.convert('RGB')
     w = pic.size[0]
     h = pic.size[1]
-    mkey = md5(key)
-    seqc = shuffle(prims[int(mkey[:3], 16)], len(alphabet))
-    randx = Random(prims[int(mkey[3:6], 16)])
-    randy = Random(prims[int(mkey[6:9], 16)])
-    redind = dict(zip(range(len(seqc)), seqc))
-    xl = set()
-    yl = set()
-    def sym():
-        x = randx.nextid(w, xl)
-        y = randy.nextid(h, yl)
-        try:
-            return redind[px[x, y][0]]
-        except:
-            return '\0'
+    walker = PixelWalker(key,w,h)
     px = pic.load()
-    testsignal = reduce(str.__add__, (sym() for _ in range(len(signal))))
+    testsignal = reduce(str.__add__, (walker.getc(px) for _ in range(len(signal))))
     if testsignal != signal:
         print('signal error: "%s"' % testsignal)
         return
     try:
-        tlen = int(reduce(str.__add__, (sym() for _ in range(4))), 16)
+        tlen = int(reduce(str.__add__, (walker.getc(px) for _ in range(4))), 16)
     except:
         print('grab len error')
         return
     with open(textfile, 'wt') as hdr:
         for _ in range(tlen):
-            hdr.write(sym())
-    print('ok')
+            hdr.write(walker.getc(px))
+    print('ok %s' % (len(signal) + 4 + tlen))
 
 parser = argparse.ArgumentParser('steganography')
 parser.add_argument('-k', help='key password')
 parser.add_argument('-f', help='text file')
 parser.add_argument('-p', help='picture')
+parser.add_argument('-g', help='generate picture with size. Example "-g 100x500"')
+parser.add_argument('-s', default=False, action='store_true', help='add salt')
 parser.add_argument('-x', default=False, action='store_true', help='decrypt')
 #parser.add_argument('-c', default='0.$.$:ff.$.$', help='color range for crypt (<min>:<max> where color is r.g.b where $ is "use original color component")')
 args = parser.parse_args()
@@ -149,4 +250,9 @@ else:
     if args.x:
         decrypt(args.k, args.f, args.p)
     else:
-        encrypt(args.k, args.f, args.p)
+        if args.g is None:
+            encrypt(args.k, args.f, args.p, None, args.s)
+        else:
+            sz = args.g.split('x')
+            sz = (int(sz[0]), int(sz[1]))
+            encrypt(args.k, args.f, args.p, sz)
