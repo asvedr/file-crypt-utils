@@ -93,10 +93,13 @@ def isrgb(pic):
     except:
         return False
 
-#randclr = lambda: random.randint(0,255)
 def randclr():
     return tuple(i % 255 for i in unpack('iii', os.urandom(12)))
-    #return abs(unpack('i', os.urandom(4))[0]) >> 8
+intence = max
+def setintence(pxl,val):
+    orig = intence(pxl)
+    coef = val / orig
+    return (int(pxl[0] * coef), int(pxl[1] * coef), int(pxl[2] * coef))
 def sym_indexer(key):
     seq = shuffle(int(key, 16), len(alphabet))
     return dict(zip(seq, range(len(seq))))
@@ -118,10 +121,10 @@ class PixelWalker(object):
                 #indexer_sym(mkey[4:8]),
                 #indexer_sym(mkey[8:12])
             #)
-        self.randx1 = Random(prims[int(mkey[12:15], 16)])
-        self.randx2 = Random(prims[int(mkey[15:18], 16)])
-        self.randy1 = Random(prims[int(mkey[18:21], 16)])
-        self.randy2 = Random(prims[int(mkey[21:24], 16)])
+        self.randx = Random(prims[int(mkey[12:15], 16)])
+        #self.randx2 = Random(prims[int(mkey[15:18], 16)])
+        #self.randy1 = Random(prims[int(mkey[18:21], 16)])
+        #self.randy2 = Random(prims[int(mkey[21:24], 16)])
         self.kind   = 0
         self.klen   = len(key)
         self.w      = w
@@ -129,41 +132,32 @@ class PixelWalker(object):
         self.wh     = w * h
         self.idx    = set()
         self.idy    = set()
-    def randx(self):
-        #if alphaind[self.key[self.kind]] % 2 == 0:
-            return self.randx1
-        #else:
-        #    return self.randx2
-    #def randy(self):
-        #if alphaind[self.key[self.klen - self.kind - 1]] % 2 == 0:
-        #    return self.randy1
-        #else:
-        #    return self.randy2
+    #def randx(self):
+    #    return self.randx1
     def getc(self,pic):
         passym  = self.key[self.kind] 
-        ind     = alphaind[passym] % 3
-        crd     = self.randx().nextid(self.wh, self.idx)
+        #ind     = alphaind[passym] % 3
+        crd     = self.randx.nextid(self.wh, self.idx)
         y       = int(crd / self.w)
         x       = crd % self.w
-        pixel   = pic[x,y]#pic[self.randx().nextid(self.w, self.idx), self.randy().nextid(self.h, self.idy)]
-        return self.inds[pixel[ind] ^ alphaind[passym]]
+        pixel   = pic[x,y]
+        return self.inds[intence(pixel) ^ alphaind[passym]]
     def putc(self,pic,sym):
-        #x = self.randx().nextid(self.w, self.idx)
-        #y = self.randy().nextid(self.h, self.idy)
-        crd = self.randx().nextid(self.wh, self.idx)
+        crd = self.randx.nextid(self.wh, self.idx)
         y   = int(crd / self.w)
         x   = crd % self.w
         pixel = pic[x,y]
         passym = self.key[self.kind]
-        ind    = alphaind[passym] % 3
-        def cval():
-            return self.sind[sym] ^ alphaind[passym]
-        if ind == 0:
-            pic[x,y] = (cval(), pixel[1], pixel[2])
-        elif ind == 1:
-            pic[x,y] = (pixel[0], cval(), pixel[2])
-        else:
-            pic[x,y] = (pixel[0], pixel[1], cval())
+        #ind    = alphaind[passym] % 3
+        #def cval():
+        #    return self.sind[sym] ^ alphaind[passym]
+        #if ind == 0:
+        #    pic[x,y] = (cval(), pixel[1], pixel[2])
+        #elif ind == 1:
+        #    pic[x,y] = (pixel[0], cval(), pixel[2])
+        #else:
+        #    pic[x,y] = (pixel[0], pixel[1], cval())
+        pic[x,y] = setintence(pixel, self.sind[sym] ^ alphaind[passym])
     #@staticmethod
     def chstate(f):
         def res(self,*args):
@@ -192,10 +186,11 @@ def encrypt(key,textfile,picn,rand_pic_size,salt):
         if not (salt is None):
             saltc = int(w * h * (salt / 100))
             for i in range(saltc):
-                xy = unpack('ii', os.urandom(8))
-                x = xy[0] % w
-                y = xy[1] % h
-                px[x,y] = randclr()
+                xyv = unpack('iii', os.urandom(12))
+                x = xyv[0] % w
+                y = xyv[1] % h
+                #px[x,y] = randclr()
+                px[x,y] = setintence(px[x,y], xyv[2] % 255)
                 if i % 100 == 0:
                     print('salt: %d of %d: %f%%' % (i, saltc, int(i * 100 / saltc)))
     else:
