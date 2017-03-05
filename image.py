@@ -2,9 +2,11 @@
 import argparse
 from PIL import Image
 from functools import reduce
+from struct import unpack
 import hashlib
 import random
 import time
+import os
 
 def _prims(cnt):
     prims = [2]
@@ -91,7 +93,10 @@ def isrgb(pic):
     except:
         return False
 
-randclr = lambda: random.randint(0,255)
+#randclr = lambda: random.randint(0,255)
+def randclr():
+    return tuple(i % 255 for i in unpack('iii', os.urandom(12)))
+    #return abs(unpack('i', os.urandom(4))[0]) >> 8
 def sym_indexer(key):
     seq = shuffle(int(key, 16), len(alphabet))
     return dict(zip(seq, range(len(seq))))
@@ -183,19 +188,32 @@ def encrypt(key,textfile,picn,rand_pic_size,salt):
             pic = pic.convert('RGB')
         w = pic.size[0]
         h = pic.size[1]
+        px = pic.load()
+        if not (salt is None):
+            saltc = int(w * h * (salt / 100))
+            for i in range(saltc):
+                xy = unpack('ii', os.urandom(8))
+                x = xy[0] % w
+                y = xy[1] % h
+                px[x,y] = randclr()
+                if i % 100 == 0:
+                    print('salt: %d of %d: %f%%' % (i, saltc, int(i * 100 / saltc)))
     else:
         pic = Image.new('RGB', rand_pic_size, 'white')
-        random.seed(time.time())
+        #random.seed(time.time())
         w = pic.size[0]
         h = pic.size[1]
         px = pic.load()
         for x in range(w):
             for y in range(h):
-                px[x,y] = (randclr(), randclr(), randclr())
+                px[x,y] = randclr()#(randclr(), randclr(), randclr())
     walker = PixelWalker(key,w,h)
     with open(textfile, 'rt') as hdr:
         txt = hdr.read()
     tlen = to4(hex(len(txt))[2:])
+    if w * h <= len(txt) + len(tlen) + len(signal):
+        print('image too small')
+        return
     #xl = set()
     #yl = set()
     px = pic.load()
@@ -239,7 +257,8 @@ parser.add_argument('-k', help='key password')
 parser.add_argument('-f', help='text file')
 parser.add_argument('-p', help='picture')
 parser.add_argument('-g', help='generate picture with size. Example "-g 100x500"')
-parser.add_argument('-s', default=False, action='store_true', help='add salt')
+parser.add_argument('-gray', default=False, action='store_true', help='use grayscale')
+parser.add_argument('-s', help='add salt(percent)')
 parser.add_argument('-x', default=False, action='store_true', help='decrypt')
 #parser.add_argument('-c', default='0.$.$:ff.$.$', help='color range for crypt (<min>:<max> where color is r.g.b where $ is "use original color component")')
 args = parser.parse_args()
@@ -251,8 +270,18 @@ else:
         decrypt(args.k, args.f, args.p)
     else:
         if args.g is None:
-            encrypt(args.k, args.f, args.p, None, args.s)
+            if args.s:
+                salt = 0
+                try:
+                    salt = float(args.s)
+                    assert(salt > 0 and salt < 100)
+                except:
+                    print('salt is not number in (0 .. 100)')
+                    sys.exit(1)
+                encrypt(args.k, args.f, args.p, None, salt)
+            else:
+                encrypt(args.k, args.f, args.p, None, None)
         else:
             sz = args.g.split('x')
             sz = (int(sz[0]), int(sz[1]))
-            encrypt(args.k, args.f, args.p, sz)
+            encrypt(args.k, args.f, args.p, sz, None)
