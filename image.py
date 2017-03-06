@@ -7,6 +7,7 @@ import hashlib
 import time
 import os
 import sys
+from binascii import b2a_base64, a2b_base64
 
 # tuple of primary numbers
 def _prims(cnt):
@@ -181,7 +182,7 @@ class PixelWalker(object):
 #        indexer = self.randc()
 #        pic[self.randx(), self.randy()] = indexer[sym] ^ self.key[self.kind]
 
-def encrypt(key,textfile,picn,rand_pic_size,salt):
+def encrypt(key,textfile,picn,rand_pic_size,salt,isbin):
     if rand_pic_size is None:
         pic = Image.open(picn)
         if not isrgb(pic):
@@ -207,8 +208,12 @@ def encrypt(key,textfile,picn,rand_pic_size,salt):
             for y in range(h):
                 px[x,y] = randclr()#(randclr(), randclr(), randclr())
     walker = PixelWalker(key,w,h)
-    with open(textfile, 'rt') as hdr:
-        txt = hdr.read()
+    if isbin:
+        with open(textfile, 'rb') as hdr:
+            txt = b2a_base64(hdr.read()).decode('utf8')
+    else:
+        with open(textfile, 'rt') as hdr:
+            txt = hdr.read()
     tlen = to4(hex(len(txt))[2:])
     signal = md5(key)
     if w * h <= len(txt) + len(tlen) + len(signal):
@@ -224,7 +229,7 @@ def encrypt(key,textfile,picn,rand_pic_size,salt):
         pic.save(picn)
     print('ok %s' % len(txt))
 
-def decrypt(key,textfile,picn):
+def decrypt(key,textfile,picn,isbin):
     pic = Image.open(picn)
     if not isrgb(pic):
         pic.convert('RGB')
@@ -241,11 +246,20 @@ def decrypt(key,textfile,picn):
         tlen = int(reduce(str.__add__, (walker.getc(px) for _ in range(4))), 16)
     except:
         raise DecodeError()
-        #print('grab len error')
-        #return
-    with open(textfile, 'wt') as hdr:
-        for _ in range(tlen):
-            hdr.write(walker.getc(px))
+    if isbin:
+        buffile = os.path.join(os.path.dirname(textfile), '__buf__123456789')
+        with open(buffile, 'wt') as hdr:
+            for _ in range(tlen):
+                hdr.write(walker.getc(px))
+        print('buf ok, decoding base64')
+        with open(textfile, 'wb') as out:
+            with open(buffile, 'rt') as hdr:
+                out.write(a2b_base64(hdr.read().encode('utf8')))
+        os.remove(buffile)
+    else:
+        with open(textfile, 'wt') as hdr:
+            for _ in range(tlen):
+                hdr.write(walker.getc(px))
     print('ok %s' % (len(signal) + 4 + tlen))
 
 parser = argparse.ArgumentParser('steganography')
@@ -253,10 +267,9 @@ parser.add_argument('-k', help='key password')
 parser.add_argument('-f', help='text file')
 parser.add_argument('-p', help='picture')
 parser.add_argument('-g', help='generate picture with size. Example "-g 100x500"')
-#parser.add_argument('-gray', default=False, action='store_true', help='use grayscale')
 parser.add_argument('-s', help='add salt(percent)')
 parser.add_argument('-x', default=False, action='store_true', help='decrypt')
-#parser.add_argument('-c', default='0.$.$:ff.$.$', help='color range for crypt (<min>:<max> where color is r.g.b where $ is "use original color component")')
+parser.add_argument('-b', default=False, action='store_true', help='message binary')
 args = parser.parse_args()
 
 if args.k is None or args.f is None or args.p is None:
@@ -264,7 +277,7 @@ if args.k is None or args.f is None or args.p is None:
 else:
     if args.x:
         try:
-            decrypt(args.k, args.f, args.p)
+            decrypt(args.k, args.f, args.p, args.b)
         except DecodeError:
             print('can not decrypt')
             sys.exit(1)
@@ -278,10 +291,10 @@ else:
                 except:
                     print('salt is not number in (0 .. 100)')
                     sys.exit(1)
-                encrypt(args.k, args.f, args.p, None, salt)
+                encrypt(args.k, args.f, args.p, None, salt, args.b)
             else:
-                encrypt(args.k, args.f, args.p, None, None)
+                encrypt(args.k, args.f, args.p, None, None, args.b)
         else:
             sz = args.g.split('x')
             sz = (int(sz[0]), int(sz[1]))
-            encrypt(args.k, args.f, args.p, sz, None)
+            encrypt(args.k, args.f, args.p, sz, None, args.b)
