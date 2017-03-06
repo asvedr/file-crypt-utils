@@ -6,6 +6,7 @@ from struct import unpack
 import hashlib
 import time
 import os
+import sys
 
 # tuple of primary numbers
 def _prims(cnt):
@@ -25,6 +26,9 @@ prims = _prims(5001)
 
 # exception for check situation when identyty random generator stucked in loop
 class RandomLoop(Exception):
+    pass
+
+class DecodeError(Exception):
     pass
 
 # determined random generator
@@ -157,7 +161,7 @@ class PixelWalker(object):
         try:
             return self.inds[intence(pixel) ^ alphaind[passym]]
         except:
-            return '<ERR>'
+            raise DecodeError()
     @chstate
     def putc(self,pic,sym):
         crd = self.randx.nextid(self.wh, self.idx)
@@ -229,9 +233,6 @@ def decrypt(key,textfile,picn):
     walker = PixelWalker(key,w,h)
     px = pic.load()
     signal = md5(key)
-#    def sad(a,b):
-#        print('%s + %s' % (repr(a), repr(b)))
-#        return a + b
     testsignal = reduce(str.__add__, (walker.getc(px) for _ in range(len(signal))))
     if testsignal != signal:
         print('signal error:\n%s\n%s' % (testsignal, signal))
@@ -239,8 +240,9 @@ def decrypt(key,textfile,picn):
     try:
         tlen = int(reduce(str.__add__, (walker.getc(px) for _ in range(4))), 16)
     except:
-        print('grab len error')
-        return
+        raise DecodeError()
+        #print('grab len error')
+        #return
     with open(textfile, 'wt') as hdr:
         for _ in range(tlen):
             hdr.write(walker.getc(px))
@@ -251,7 +253,7 @@ parser.add_argument('-k', help='key password')
 parser.add_argument('-f', help='text file')
 parser.add_argument('-p', help='picture')
 parser.add_argument('-g', help='generate picture with size. Example "-g 100x500"')
-parser.add_argument('-gray', default=False, action='store_true', help='use grayscale')
+#parser.add_argument('-gray', default=False, action='store_true', help='use grayscale')
 parser.add_argument('-s', help='add salt(percent)')
 parser.add_argument('-x', default=False, action='store_true', help='decrypt')
 #parser.add_argument('-c', default='0.$.$:ff.$.$', help='color range for crypt (<min>:<max> where color is r.g.b where $ is "use original color component")')
@@ -261,7 +263,11 @@ if args.k is None or args.f is None or args.p is None:
     print('bad args')
 else:
     if args.x:
-        decrypt(args.k, args.f, args.p)
+        try:
+            decrypt(args.k, args.f, args.p)
+        except DecodeError:
+            print('can not decrypt')
+            sys.exit(1)
     else:
         if args.g is None:
             if args.s:
