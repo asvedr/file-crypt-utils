@@ -4,10 +4,10 @@ from PIL import Image
 from functools import reduce
 from struct import unpack
 import hashlib
-import random
 import time
 import os
 
+# tuple of primary numbers
 def _prims(cnt):
     prims = [2]
     i = 3
@@ -23,16 +23,17 @@ def _prims(cnt):
     return tuple(prims)
 prims = _prims(5001)
 
+# exception for check situation when identyty random generator stucked in loop
 class RandomLoop(Exception):
     pass
 
+# determined random generator
 class Random:
-    def __init__(self,n0):#,ia,ib):
+    def __init__(self,n0):
         self.n = n0
         self.A = 2050
         self.B = 4000
         self.initM()
-        #self.M = prims[5000] * prims[4999]
     def initM(self):
         self.M = prims[self.A] * prims[self.B]
     def __iter__(self):
@@ -61,15 +62,16 @@ class Random:
                 self.n = prims[self.B]
                 self.initM()
 
+# alphabet len must be < 256
 alphabet = ['\n','\t'] + [chr(i) for i in range(32, 127)] + [chr(i) for i in range(ord('А'),ord('ё'))]
 alphaind = dict(zip(alphabet, range(len(alphabet))))
-signal = 'ok'
 
 def md5(s):
     m = hashlib.md5()
     m.update(s.encode('utf8'))
     return m.hexdigest()
 
+# shuffle alphabet and return
 def shuffle(n,count):
     ''' arguments: (seed for RAND, iteration count) '''
     alp = alphabet[:]
@@ -81,6 +83,7 @@ def shuffle(n,count):
         alp[i],alp[j] = alp[j],alp[i]
     return alp
 
+# A8 ==> 00A8. hex num to 4 len
 def to4(t):
     for _ in range(4 - len(t)):
         t = '0' + t
@@ -93,16 +96,33 @@ def isrgb(pic):
     except:
         return False
 
+# true-random color
 def randclr():
     return tuple(i % 255 for i in unpack('iii', os.urandom(12)))
 intence = max
 def setintence(pxl,val):
-    orig = intence(pxl)
-    coef = val / orig
-    return (int(pxl[0] * coef), int(pxl[1] * coef), int(pxl[2] * coef))
+    maxi = 0
+    maxv = pxl[0]
+    for i in range(1,3):
+        if pxl[i] > maxv:
+            maxv = pxl[i]
+            maxi = i
+    coef = (val / maxv) * 0.99
+    if maxi == 0:
+        return (val, int(pxl[1] * coef), int(pxl[2] * coef))
+    elif maxi == 1:
+        return (int(pxl[0] * coef), val, int(pxl[2] * coef))
+    else:
+        return (int(pxl[0] * coef), int(pxl[1] * coef), val)
+    #assert intence(pix) == val
+    #return pix
+
+# making dict {symbol: index}
 def sym_indexer(key):
     seq = shuffle(int(key, 16), len(alphabet))
     return dict(zip(seq, range(len(seq))))
+
+# making dict {index:symbol}
 def indexer_sym(key):
     seq = shuffle(int(key, 16), len(alphabet))
     return dict(zip(range(len(seq)), seq))
@@ -111,20 +131,9 @@ class PixelWalker(object):
     def __init__(self,key,w,h):
         self.key = key
         mkey = md5(key)
-        self.sind   = sym_indexer(mkey[:4])# (
-                #sym_indexer(mkey[:4])#,
-                #sym_indexer(mkey[4:8]),
-                #sym_indexer(mkey[8:12])
-            #)
-        self.inds   = indexer_sym(mkey[:4])# (
-                #indexer_sym(mkey[:4])#,
-                #indexer_sym(mkey[4:8]),
-                #indexer_sym(mkey[8:12])
-            #)
-        self.randx = Random(prims[int(mkey[12:15], 16)])
-        #self.randx2 = Random(prims[int(mkey[15:18], 16)])
-        #self.randy1 = Random(prims[int(mkey[18:21], 16)])
-        #self.randy2 = Random(prims[int(mkey[21:24], 16)])
+        self.sind   = sym_indexer(mkey[:4])
+        self.inds   = indexer_sym(mkey[:4])
+        self.randx  = Random(prims[int(mkey[12:15], 16)])
         self.kind   = 0
         self.klen   = len(key)
         self.w      = w
@@ -132,48 +141,41 @@ class PixelWalker(object):
         self.wh     = w * h
         self.idx    = set()
         self.idy    = set()
-    #def randx(self):
-    #    return self.randx1
+    def chstate(f):
+        def res(self,*args):
+            ans = f(self,*args)
+            self.kind = (self.kind + 1) % self.klen
+            return ans
+        return res
+    @chstate
     def getc(self,pic):
         passym  = self.key[self.kind] 
-        #ind     = alphaind[passym] % 3
         crd     = self.randx.nextid(self.wh, self.idx)
         y       = int(crd / self.w)
         x       = crd % self.w
         pixel   = pic[x,y]
-        return self.inds[intence(pixel) ^ alphaind[passym]]
+        try:
+            return self.inds[intence(pixel) ^ alphaind[passym]]
+        except:
+            return '<ERR>'
+    @chstate
     def putc(self,pic,sym):
         crd = self.randx.nextid(self.wh, self.idx)
         y   = int(crd / self.w)
         x   = crd % self.w
         pixel = pic[x,y]
         passym = self.key[self.kind]
-        #ind    = alphaind[passym] % 3
-        #def cval():
-        #    return self.sind[sym] ^ alphaind[passym]
-        #if ind == 0:
-        #    pic[x,y] = (cval(), pixel[1], pixel[2])
-        #elif ind == 1:
-        #    pic[x,y] = (pixel[0], cval(), pixel[2])
-        #else:
-        #    pic[x,y] = (pixel[0], pixel[1], cval())
         pic[x,y] = setintence(pixel, self.sind[sym] ^ alphaind[passym])
-    #@staticmethod
-    def chstate(f):
-        def res(self,*args):
-            f(self,*args)
-            self.kind = (self.kind + 1) % self.klen
-        return res
-    @chstate
-    def getpixel(self,pic):
-        x = self.randx()
-        y = self.randy()
-        clr = pic[x,y]
-        self.randc()
-    @chstate
-    def putpixel(self,pic,sym):
-        indexer = self.randc()
-        pic[self.randx(), self.randy()] = indexer[sym] ^ self.key[self.kind]
+#    @chstate
+#    def getpixel(self,pic):
+#        x = self.randx()
+#        y = self.randy()
+#        clr = pic[x,y]
+#        self.randc()
+#    @chstate
+#    def putpixel(self,pic,sym):
+#        indexer = self.randc()
+#        pic[self.randx(), self.randy()] = indexer[sym] ^ self.key[self.kind]
 
 def encrypt(key,textfile,picn,rand_pic_size,salt):
     if rand_pic_size is None:
@@ -189,13 +191,11 @@ def encrypt(key,textfile,picn,rand_pic_size,salt):
                 xyv = unpack('iii', os.urandom(12))
                 x = xyv[0] % w
                 y = xyv[1] % h
-                #px[x,y] = randclr()
                 px[x,y] = setintence(px[x,y], xyv[2] % 255)
                 if i % 100 == 0:
                     print('salt: %d of %d: %f%%' % (i, saltc, int(i * 100 / saltc)))
     else:
         pic = Image.new('RGB', rand_pic_size, 'white')
-        #random.seed(time.time())
         w = pic.size[0]
         h = pic.size[1]
         px = pic.load()
@@ -206,19 +206,14 @@ def encrypt(key,textfile,picn,rand_pic_size,salt):
     with open(textfile, 'rt') as hdr:
         txt = hdr.read()
     tlen = to4(hex(len(txt))[2:])
+    signal = md5(key)
     if w * h <= len(txt) + len(tlen) + len(signal):
         print('image too small')
         return
-    #xl = set()
-    #yl = set()
     px = pic.load()
-    #i = 0
     txt = signal + tlen + txt
     for c in txt:
-        #if i % 20 == 0:
-            #print('%s%%' % (float(i) / len(txt) * 100))
         walker.putc(px, c)
-        #i += 1
     if rand_pic_size is None:
         pic.save(picn + '.cr.png', 'PNG')
     else:
@@ -233,9 +228,13 @@ def decrypt(key,textfile,picn):
     h = pic.size[1]
     walker = PixelWalker(key,w,h)
     px = pic.load()
+    signal = md5(key)
+#    def sad(a,b):
+#        print('%s + %s' % (repr(a), repr(b)))
+#        return a + b
     testsignal = reduce(str.__add__, (walker.getc(px) for _ in range(len(signal))))
     if testsignal != signal:
-        print('signal error: "%s"' % testsignal)
+        print('signal error:\n%s\n%s' % (testsignal, signal))
         return
     try:
         tlen = int(reduce(str.__add__, (walker.getc(px) for _ in range(4))), 16)
